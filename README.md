@@ -537,6 +537,10 @@ Before cutting a release:
 - tag the release as `vX.Y.Z` after the version commit is ready
 - update downstream pinned-git consumers such as main Yazelix after the Ratconfig commit or tag is pushed
 
+### Unreleased
+
+- TOML value replacements retain key formatting, surrounding whitespace, and same-line comments; repeated identical patches return unchanged text
+
 ### 6.0.0
 
 - `ConfigUiModel::recommended_fields` and `ConfigUiSettingsView::Overview` replace the previous focused allowlist and view; Overview combines recommendations with fields that are explicit, locally invalid, externally managed, or named by exact diagnostics, remains distinct only when it hides at least three fields and 25% of a tab, and otherwise projects that tab as All

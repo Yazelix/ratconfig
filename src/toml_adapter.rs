@@ -37,16 +37,20 @@ pub fn set_toml_value_text(
     value: &JsonValue,
 ) -> Result<PatchOutcome, TomlPatchError> {
     let parts = split_toml_path(path)?;
-    let replacement = toml_value_from_json(value, path)?;
+    let mut replacement = toml_value_from_json(value, path)?;
     let mut document = parse_document(raw)?;
     let parent = parent_table_or_create(document.as_table_mut(), &parts, path)?;
     let leaf = parts.last().expect("split path guarantees a leaf");
-    let mutation = if parent.contains_key(leaf) {
+    let mutation = if let Some(item) = parent.get_mut(leaf) {
+        if let Some(existing) = item.as_value() {
+            *replacement.decor_mut() = existing.decor().clone();
+        }
+        *item = Item::Value(replacement);
         PatchMutation::Replaced
     } else {
+        parent.insert(leaf, Item::Value(replacement));
         PatchMutation::Inserted
     };
-    parent.insert(leaf, Item::Value(replacement));
     let text = document.to_string();
     let mutation = if text == raw {
         PatchMutation::Unchanged
@@ -350,6 +354,28 @@ mod tests {
                 }
             ]))
         );
+    }
+
+    #[test]
+    fn set_toml_value_preserves_outer_comments_and_spacing() {
+        for (before, value, after) in [
+            ("1", json!(2), "2"),
+            ("[1, 2]", json!([3, 4]), "[3, 4]"),
+            ("{ old = 1 }", json!({"new": 2}), "{ new = 2 }"),
+        ] {
+            let raw = format!(
+                "# root\n[ui] # table\nvalue\t=  {before}  # keep this note\nother = true # untouched\n"
+            );
+            let expected = raw.replacen(before, after, 1);
+            let outcome = set_toml_value_text(&raw, "ui.value", &value).expect("patch");
+
+            assert_eq!(outcome.text, expected);
+            assert_eq!(outcome.mutation, PatchMutation::Replaced);
+            let unchanged =
+                set_toml_value_text(&outcome.text, "ui.value", &value).expect("repeat patch");
+            assert_eq!(unchanged.text, outcome.text);
+            assert_eq!(unchanged.mutation, PatchMutation::Unchanged);
+        }
     }
 
     // Defends: native TOML bare keys with hyphens remain patchable through ratconfig dotted paths.
